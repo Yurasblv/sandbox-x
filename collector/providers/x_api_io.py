@@ -1,12 +1,11 @@
-import asyncio
 import time
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 from loguru import logger
 
 from collector.core.config import Settings
+from collector.core.config import settings as app_settings
 from collector.core.errors import (
     ProviderConfigurationError,
     ProviderRateLimitError,
@@ -18,22 +17,26 @@ from collector.providers.base import (
     PostCollectionResult,
     QueryType,
     ReplyCollectionResult,
-    TwitterProvider,
+    XProvider,
 )
+from collector.providers.utils import retry_provider_request
 
 
-class TwitterAPIIOProvider(TwitterProvider):
-    key = "twitterapi_io"
+class XAPIIOProvider(XProvider):
+    settings: Settings = app_settings
 
-    def __init__(self, settings: Settings) -> None:
-        if not settings.twitterapi_io_api_key:
-            raise ProviderConfigurationError("TWITTERAPI_IO_API_KEY is required")
+    @property
+    def provider_key(self) -> str:
+        return self.settings.x.provider.value
 
-        self.settings = settings
+    def __init__(self) -> None:
+        if not self.settings.x.api_key:
+            raise ProviderConfigurationError("X__API_KEY is required")
+
         self.client = httpx.AsyncClient(
-            base_url=settings.twitterapi_io_base_url.rstrip("/"),
-            headers={"X-API-Key": settings.twitterapi_io_api_key},
-            timeout=settings.http_timeout_seconds,
+            base_url=self.settings.x.base_url.rstrip("/"),
+            headers={"X-API-Key": self.settings.x.api_key},
+            timeout=self.settings.x.timeout_seconds,
         )
 
     async def close(self) -> None:
@@ -51,7 +54,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         return AccountCollectionResult(
             accounts,
             ProviderMetadata(
-                provider_key=self.key,
+                provider_key=self.provider_key,
                 request_path="/twitter/user/info",
                 input_ids=usernames,
                 raw=raw,
@@ -69,7 +72,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         return AccountCollectionResult(
             accounts,
             ProviderMetadata(
-                provider_key=self.key,
+                provider_key=self.provider_key,
                 request_path="/twitter/user/search",
                 input_query=query,
                 next_cursor=payload["next_cursor"],
@@ -91,7 +94,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         return PostCollectionResult(
             posts,
             ProviderMetadata(
-                provider_key=self.key,
+                provider_key=self.provider_key,
                 request_path="/twitter/user/last_tweets",
                 input_ids=[username],
                 next_cursor=payload["next_cursor"],
@@ -109,7 +112,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         return PostCollectionResult(
             posts,
             ProviderMetadata(
-                provider_key=self.key,
+                provider_key=self.provider_key,
                 request_path="/twitter/tweets",
                 input_ids=ids,
                 raw=payload,
@@ -129,7 +132,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         return PostCollectionResult(
             posts,
             ProviderMetadata(
-                provider_key=self.key,
+                provider_key=self.provider_key,
                 request_path="/twitter/tweet/advanced_search",
                 input_query=query,
                 next_cursor=payload["next_cursor"],
@@ -149,7 +152,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         return ReplyCollectionResult(
             replies,
             ProviderMetadata(
-                provider_key=self.key,
+                provider_key=self.provider_key,
                 request_path="/twitter/tweet/replies",
                 input_ids=[post_id],
                 next_cursor=payload["next_cursor"],
@@ -174,7 +177,7 @@ class TwitterAPIIOProvider(TwitterProvider):
         while len(items) < limit and has_next_page:
             page_params = {**params, "cursor": cursor}
             logger.bind(
-                provider=self.key,
+                provider=self.provider_key,
                 path=path,
                 cursor=cursor or None,
                 collected_count=len(items),
@@ -186,7 +189,7 @@ class TwitterAPIIOProvider(TwitterProvider):
             has_next_page = bool(page.get("has_next_page"))
             cursor = page.get("next_cursor") or ""
             logger.bind(
-                provider=self.key,
+                provider=self.provider_key,
                 path=path,
                 page_item_count=len(page.get(item_key) or []),
                 collected_count=len(items),
@@ -204,95 +207,65 @@ class TwitterAPIIOProvider(TwitterProvider):
         }
 
     async def _get(self, path: str, *, params: dict[str, Any]) -> dict[str, Any]:
-        async def send() -> httpx.Response:
-            started_at = time.perf_counter()
-            logger.bind(
-                provider=self.key,
-                method="GET",
-                path=path,
-                params=_redact(params),
-            ).info("provider_request_started")
-            response = await self.client.get(path, params=params)
-            elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
-            logger.bind(
-                provider=self.key,
-                method="GET",
-                path=path,
-                params=_redact(params),
-                status_code=response.status_code,
-                elapsed_ms=elapsed_ms,
-                response_preview=response.text[:500],
-            ).info("provider_response_received")
-            return response
-
-        response = await self._retry(send)
+        response = await self._send("GET", path, params=params)
         if response.status_code == 429:
-            logger.bind(provider=self.key, path=path, params=_redact(params)).warning(
+            logger.bind(provider=self.provider_key, path=path, params=_redact(params)).warning(
                 "provider_rate_limit"
             )
-            raise ProviderRateLimitError("TwitterAPI.io rate limit reached")
+            raise ProviderRateLimitError("X API provider rate limit reached")
         if response.is_error:
             logger.bind(
-                provider=self.key,
+                provider=self.provider_key,
                 path=path,
                 params=_redact(params),
                 status_code=response.status_code,
                 response_preview=response.text[:1000],
             ).error("provider_request_error")
             raise ProviderRequestError(
-                "TwitterAPI.io request failed",
+                "X API provider request failed",
                 details={"status_code": response.status_code, "body": response.text[:1000]},
             )
 
         payload = response.json()
         if payload.get("status") == "error":
             logger.bind(
-                provider=self.key,
+                provider=self.provider_key,
                 path=path,
                 params=_redact(params),
                 provider_message=payload.get("msg") or payload.get("message"),
             ).error("provider_payload_error")
             raise ProviderRequestError(
-                payload.get("msg") or payload.get("message") or "TwitterAPI.io returned an error",
+                payload.get("msg") or payload.get("message") or "X API provider returned an error",
                 details={"payload": payload},
             )
         return payload
 
-    async def _retry(self, call: Callable[[], Awaitable[httpx.Response]]) -> httpx.Response:
-        last_error: Exception | None = None
-        for attempt in range(1, self.settings.http_max_retries + 1):
-            try:
-                response = await call()
-                if response.status_code != 429 and response.status_code < 500:
-                    return response
-                retry_after = _retry_after_seconds(response)
-                sleep_seconds = retry_after or self.settings.http_backoff_seconds * attempt
-                logger.bind(
-                    provider=self.key,
-                    attempt=attempt,
-                    status_code=response.status_code,
-                    sleep_seconds=sleep_seconds,
-                ).warning("provider_request_retry")
-                await asyncio.sleep(sleep_seconds)
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last_error = exc
-                if attempt == self.settings.http_max_retries:
-                    break
-                sleep_seconds = self.settings.http_backoff_seconds * attempt
-                logger.bind(
-                    provider=self.key,
-                    attempt=attempt,
-                    error=str(exc),
-                    sleep_seconds=sleep_seconds,
-                ).warning("provider_transport_retry")
-                await asyncio.sleep(sleep_seconds)
-
-        if last_error is not None:
-            logger.bind(provider=self.key, error=str(last_error)).error("provider_transport_error")
-            raise ProviderRequestError(
-                "TwitterAPI.io transport error",
-                details={"error": str(last_error)},
-            )
+    @retry_provider_request
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any],
+    ) -> httpx.Response:
+        started_at = time.perf_counter()
+        logger.bind(
+            provider=self.provider_key,
+            method=method,
+            path=path,
+            params=_redact(params),
+        ).info("provider_request_started")
+        response = await self.client.request(method, path, params=params)
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        logger.bind(
+            provider=self.provider_key,
+            method=method,
+            path=path,
+            params=_redact(params),
+            status_code=response.status_code,
+            elapsed_ms=elapsed_ms,
+            response_preview=response.text[:500],
+        ).info("provider_response_received")
         return response
 
 
@@ -310,16 +283,6 @@ def _map_post(raw: dict[str, Any]) -> XPost:
 
 def _map_reply(raw: dict[str, Any]) -> XReply:
     return XReply.model_validate(_map_post(raw).model_dump())
-
-
-def _retry_after_seconds(response: httpx.Response) -> float | None:
-    value = response.headers.get("retry-after")
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
 
 
 def _redact(params: dict[str, Any]) -> dict[str, Any]:

@@ -1,2 +1,1 @@
-"""Twitter/X collector service."""
-
+"""X collector service."""

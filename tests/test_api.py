@@ -82,6 +82,30 @@ def test_get_default_accounts() -> None:
     assert body["meta"]["provider_key"] == "test_provider"
 
 
+def test_health() -> None:
+    client = _client()
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_cors_preflight() -> None:
+    client = _client()
+
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
 def test_get_accounts_by_usernames() -> None:
     client = _client()
 

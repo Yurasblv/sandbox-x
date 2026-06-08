@@ -24,9 +24,7 @@ class ReplyCollectionResult:
         self.metadata = metadata
 
 
-class TwitterProvider(ABC):
-    key: str
-
+class XProvider(ABC):
     @abstractmethod
     async def get_accounts(self, usernames: list[str]) -> AccountCollectionResult:
         raise NotImplementedError

@@ -41,7 +41,7 @@ class XPost(BaseModel):
     text: str | None = None
     created_at: str | None = Field(default=None, alias="createdAt")
     language: str | None = Field(default=None, alias="lang")
-    retweets: int | None = Field(default=None, alias="retweetCount")
+    reposts: int | None = Field(default=None, alias="retweetCount")
     replies_count: int | None = Field(default=None, alias="replyCount")
     likes: int | None = Field(default=None, alias="likeCount")
     quotes: int | None = Field(default=None, alias="quoteCount")

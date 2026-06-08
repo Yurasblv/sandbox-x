@@ -12,7 +12,7 @@ from collector.api.schemas import (
 )
 from collector.services.collection import CollectionService
 
-router = APIRouter(prefix="/api/v1", tags=["twitter"])
+router = APIRouter(prefix="/api/v1", tags=["x"])
 
 
 @router.get("/accounts/default", response_model=AccountsResponse)

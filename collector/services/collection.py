@@ -1,14 +1,18 @@
 from collector.core.config import Settings
-from collector.providers.base import QueryType, TwitterProvider
+from collector.core.config import settings as app_settings
+from collector.providers.base import QueryType, XProvider
+
+DEFAULT_ACCOUNT_USERNAMES = ["elonmusk", "realDonaldTrump"]
 
 
 class CollectionService:
-    def __init__(self, provider: TwitterProvider, settings: Settings) -> None:
+    settings: Settings = app_settings
+
+    def __init__(self, provider: XProvider) -> None:
         self.provider = provider
-        self.settings = settings
 
     async def default_accounts(self):
-        return await self.provider.get_accounts(self.settings.default_account_usernames)
+        return await self.provider.get_accounts(DEFAULT_ACCOUNT_USERNAMES)
 
     async def accounts(self, usernames: list[str]):
         return await self.provider.get_accounts(usernames)
@@ -44,4 +48,4 @@ class CollectionService:
         return await self.provider.get_replies(post_id, limit=self._limit(limit))
 
     def _limit(self, value: int) -> int:
-        return max(1, min(value, self.settings.max_page_limit))
+        return max(1, min(value, self.settings.x.max_page_limit))
