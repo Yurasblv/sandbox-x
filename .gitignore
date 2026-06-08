@@ -1,0 +1,15 @@
+twitter-api-options-2026-05-25.md-3.docx
+
+.env
+.python-version
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
