@@ -1,25 +1,35 @@
-from functools import lru_cache
-
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from collector.core.enums import ProviderKey
 
-class Settings(BaseSettings):
-    app_name: str = "twitter-collector-service"
+
+class AppSettings(BaseModel):
+    app_name: str = "x-collector-service"
     environment: str = "local"
     log_level: str = "INFO"
 
-    twitter_provider: str = "twitterapi_io"
-    twitterapi_io_base_url: str = "https://api.twitterapi.io"
-    twitterapi_io_api_key: str = Field(default="", repr=False)
+    cors_allow_origins: list[str] = ["*"]
+    cors_allow_methods: list[str] = ["*"]
+    cors_allow_headers: list[str] = ["*"]
 
-    http_timeout_seconds: float = 30.0
-    http_max_retries: int = 3
-    http_backoff_seconds: float = 1.0
+
+class XSettings(BaseModel):
+    provider: ProviderKey = ProviderKey.X_IO
     default_page_limit: int = 20
     max_page_limit: int = 200
 
-    default_account_usernames: list[str] = ["elonmusk", "realDonaldTrump"]
+    base_url: str = "https://api.twitterapi.io"
+    api_key: str = Field(default="", repr=False)
+
+    timeout_seconds: float = 30.0
+    max_retries: int = 3
+    backoff_seconds: float = 1.0
+
+
+class Settings(BaseSettings):
+    app: AppSettings = Field(default_factory=AppSettings)
+    x: XSettings = Field(default_factory=XSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -29,6 +39,4 @@ class Settings(BaseSettings):
     )
 
 
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()

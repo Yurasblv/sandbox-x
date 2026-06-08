@@ -1,7 +1,7 @@
 [project]
-name = "twitter-collector-service"
+name = "x-collector-service"
 version = "0.1.0"
-description = "FastAPI microservice for collecting Twitter/X accounts, posts, and replies via pluggable providers."
+description = "FastAPI microservice for collecting X accounts, posts, and replies via pluggable providers."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-twitter-collector = "collector.main:run"
+x-collector = "collector.main:run"
 
 [build-system]
 requires = ["hatchling>=1.25"]
