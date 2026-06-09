@@ -1,15 +1,12 @@
-
 from collector.api.schemas import AccountsResponse, PostsResponse, PostsWithRepliesResponse, RepliesResponse
-from collector.core.config import Settings
-from collector.core.config import settings as app_settings
 from collector.providers.base import QueryType, XProvider
+from collector.services.utils import get_provider_settings
 
 
 class CollectionService:
-    settings: Settings = app_settings
-
     def __init__(self, provider: XProvider) -> None:
         self.provider = provider
+        self.settings = get_provider_settings(provider.provider_key)
 
     async def get_account(self, usernames: list[str]):
         result = await self.provider.get_accounts(usernames)
@@ -18,7 +15,7 @@ class CollectionService:
     async def search_accounts(self, query: str, limit: int) -> AccountsResponse:
         result = await self.provider.search_accounts(query, limit=self._limit(limit))
         return AccountsResponse(accounts=result.accounts, errors=result.errors, meta=result.metadata)
-    
+
     async def get_account_posts(
         self,
         username: str,
@@ -35,9 +32,8 @@ class CollectionService:
             until_date=until_date,
         )
         replies_by_post: dict[str, object] = {}
-        
-        if replies_limit > 0:
 
+        if replies_limit > 0:
             for post in posts_result.posts:
                 replies_by_post[post.id] = await self.provider.get_replies(
                     post.id,
@@ -77,8 +73,8 @@ class CollectionService:
         return PostsResponse(posts=result.posts, meta=result.metadata)
 
     async def replies(self, post_id: str, limit: int) -> RepliesResponse:
-        result =  await self.provider.get_replies(post_id, limit=self._limit(limit))
+        result = await self.provider.get_replies(post_id, limit=self._limit(limit))
         return RepliesResponse(replies=result.replies, meta=result.metadata)
-    
+
     def _limit(self, value: int) -> int:
-        return max(1, min(value, self.settings.x.max_posts_limit))
+        return max(1, min(value, self.settings.max_posts_limit))
