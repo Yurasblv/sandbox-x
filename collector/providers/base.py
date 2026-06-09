@@ -1,15 +1,21 @@
 from abc import ABC, abstractmethod
 from typing import Literal
 
-from collector.models import ProviderMetadata, XAccount, XPost, XReply
+from collector.models import ErrorDTO, ProviderMetadata, XAccount, XPost, XReply
 
 QueryType = Literal["Latest", "Top"]
 
 
 class AccountCollectionResult:
-    def __init__(self, accounts: list[XAccount], metadata: ProviderMetadata) -> None:
+    def __init__(
+        self,
+        accounts: list[XAccount],
+        metadata: ProviderMetadata,
+        errors: list[ErrorDTO] | None = None,
+    ) -> None:
         self.accounts = accounts
         self.metadata = metadata
+        self.errors = errors or []
 
 
 class PostCollectionResult:
@@ -35,7 +41,13 @@ class XProvider(ABC):
 
     @abstractmethod
     async def get_account_posts(
-        self, username: str, *, limit: int, include_replies: bool
+        self,
+        username: str,
+        *,
+        limit: int,
+        include_replies: bool,
+        since: str | None = None,
+        until_date: str | None = None,
     ) -> PostCollectionResult:
         raise NotImplementedError
 
@@ -45,7 +57,13 @@ class XProvider(ABC):
 
     @abstractmethod
     async def search_posts(
-        self, query: str, *, limit: int, query_type: QueryType
+        self,
+        query: str,
+        *,
+        limit: int,
+        query_type: QueryType,
+        since: str | None = None,
+        until_date: str | None = None,
     ) -> PostCollectionResult:
         raise NotImplementedError
 

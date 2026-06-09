@@ -34,13 +34,14 @@ class ProviderNotFoundError(AppError):
 
 
 def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    logger.bind(
-        method=request.method,
-        path=request.url.path,
-        error_code=exc.error_code,
-        status_code=exc.status_code,
-        details=exc.details,
-    ).error("app_error")
+    logger.error(
+        "app_error method={} path={} error_code={} status_code={} details={}",
+        request.method,
+        request.url.path,
+        exc.error_code,
+        exc.status_code,
+        exc.details,
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": exc.error_code, "message": exc.message, "details": exc.details}},
@@ -48,10 +49,12 @@ def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
 
 
 def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.bind(
-        method=request.method,
-        path=request.url.path,
-    ).exception("unhandled_error")
+    logger.error(
+        "unhandled_error method={} path={} error={}",
+        request.method,
+        request.url.path,
+        str(exc),
+    )
     return JSONResponse(
         status_code=500,
         content={"error": {"code": "internal_error", "message": "Unexpected server error"}},

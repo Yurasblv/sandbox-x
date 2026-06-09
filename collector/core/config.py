@@ -8,6 +8,7 @@ class AppSettings(BaseModel):
     app_name: str = "x-collector-service"
     environment: str = "local"
     log_level: str = "INFO"
+    request_batch_size: int = 10
 
     cors_allow_origins: list[str] = ["*"]
     cors_allow_methods: list[str] = ["*"]
@@ -16,13 +17,13 @@ class AppSettings(BaseModel):
 
 class XSettings(BaseModel):
     provider: ProviderKey = ProviderKey.X_IO
-    default_page_limit: int = 20
-    max_page_limit: int = 200
+    posts_limit: int = 20
+    max_posts_limit: int = 200
 
     base_url: str = "https://api.twitterapi.io"
-    api_key: str = Field(default="", repr=False)
+    api_key: str = Field(..., env="X_API_KEY")
 
-    timeout_seconds: float = 30.0
+    timeout_seconds: float = 30.0 
     max_retries: int = 3
     backoff_seconds: float = 1.0
 

@@ -3,12 +3,13 @@ from typing import Annotated
 
 from fastapi import Query
 
+from collector.core.enums import ProviderKey
 from collector.providers.factory import build_provider
 from collector.services.collection import CollectionService
 
 
 async def get_collection_service(
-    provider_key: Annotated[str | None, Query()] = None,
+    provider_key: Annotated[ProviderKey | None, Query()] = None,
 ) -> AsyncIterator[CollectionService]:
     provider = build_provider(provider_key)
     try:

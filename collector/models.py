@@ -15,6 +15,12 @@ class ProviderMetadata(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+class ErrorDTO(BaseModel):
+    source: str
+    error: str
+    status_code: int
+
+
 class XAccount(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
