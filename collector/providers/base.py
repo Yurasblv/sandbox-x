@@ -1,30 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Literal
 
-from collector.models import ProviderMetadata, XAccount, XPost, XReply
-
-QueryType = Literal["Latest", "Top"]
-
-
-class AccountCollectionResult:
-    def __init__(self, accounts: list[XAccount], metadata: ProviderMetadata) -> None:
-        self.accounts = accounts
-        self.metadata = metadata
+from collector.services.ports import (
+    AccountCollectionResult,
+    CollectionSource,
+    PostCollectionResult,
+    QueryType,
+    ReplyCollectionResult,
+)
 
 
-class PostCollectionResult:
-    def __init__(self, posts: list[XPost], metadata: ProviderMetadata) -> None:
-        self.posts = posts
-        self.metadata = metadata
-
-
-class ReplyCollectionResult:
-    def __init__(self, replies: list[XReply], metadata: ProviderMetadata) -> None:
-        self.replies = replies
-        self.metadata = metadata
-
-
-class XProvider(ABC):
+class XProvider(CollectionSource, ABC):
     @abstractmethod
     async def get_accounts(self, usernames: list[str]) -> AccountCollectionResult:
         raise NotImplementedError
@@ -35,7 +20,13 @@ class XProvider(ABC):
 
     @abstractmethod
     async def get_account_posts(
-        self, username: str, *, limit: int, include_replies: bool
+        self,
+        username: str,
+        *,
+        limit: int,
+        include_replies: bool,
+        since: str | None = None,
+        until_date: str | None = None,
     ) -> PostCollectionResult:
         raise NotImplementedError
 
@@ -45,7 +36,13 @@ class XProvider(ABC):
 
     @abstractmethod
     async def search_posts(
-        self, query: str, *, limit: int, query_type: QueryType
+        self,
+        query: str,
+        *,
+        limit: int,
+        query_type: QueryType,
+        since: str | None = None,
+        until_date: str | None = None,
     ) -> PostCollectionResult:
         raise NotImplementedError
 

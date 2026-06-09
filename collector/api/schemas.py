@@ -2,11 +2,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from collector.models import ProviderMetadata, XAccount, XPost, XReply
+from collector.models import ErrorDTO, ProviderMetadata, XAccount, XPost, XReply
 
 
 class AccountsResponse(BaseModel):
     accounts: list[XAccount]
+    errors: list[ErrorDTO] = Field(default_factory=list)
     meta: ProviderMetadata
 
 
@@ -22,13 +23,6 @@ class RepliesResponse(BaseModel):
 
 class PostsByIdsRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=100)
-
-
-class PostsWithRepliesResponse(BaseModel):
-    posts: list[XPost]
-    replies_by_post: dict[str, list[XReply]]
-    meta: ProviderMetadata
-    replies_meta: dict[str, ProviderMetadata]
 
 
 class SearchPostsQuery(BaseModel):

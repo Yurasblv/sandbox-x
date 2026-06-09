@@ -14,13 +14,23 @@ class AppSettings(BaseModel):
     cors_allow_headers: list[str] = ["*"]
 
 
-class XSettings(BaseModel):
+class CollectorSettings(BaseModel):
+    request_batch_size: int = 10
+    rate_limit_requests: int = 1
+    rate_limit_period_seconds: float = 5.0
+    posts_limit: int = 20
+    max_posts_limit: int = 200
+
+
+class BaseProviderSettings(BaseModel):
+    provider: ProviderKey
+
+
+class XSettings(BaseProviderSettings):
     provider: ProviderKey = ProviderKey.X_IO
-    default_page_limit: int = 20
-    max_page_limit: int = 200
 
     base_url: str = "https://api.twitterapi.io"
-    api_key: str = Field(default="", repr=False)
+    api_key: str = Field(..., env="X_API_KEY")
 
     timeout_seconds: float = 30.0
     max_retries: int = 3
@@ -29,6 +39,7 @@ class XSettings(BaseModel):
 
 class Settings(BaseSettings):
     app: AppSettings = Field(default_factory=AppSettings)
+    collector: CollectorSettings = Field(default_factory=CollectorSettings)
     x: XSettings = Field(default_factory=XSettings)
 
     model_config = SettingsConfigDict(
