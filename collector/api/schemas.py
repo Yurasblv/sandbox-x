@@ -25,13 +25,6 @@ class PostsByIdsRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=100)
 
 
-class PostsWithRepliesResponse(BaseModel):
-    posts: list[XPost]
-    replies_by_post: dict[str, list[XReply]]
-    meta: ProviderMetadata
-    replies_meta: dict[str, ProviderMetadata]
-
-
 class SearchPostsQuery(BaseModel):
     query_type: Literal["Latest", "Top"] = "Latest"
 

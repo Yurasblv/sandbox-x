@@ -7,7 +7,6 @@ from collector.api.schemas import (
     AccountsResponse,
     PostsByIdsRequest,
     PostsResponse,
-    PostsWithRepliesResponse,
     RepliesResponse,
 )
 from collector.core.config import settings
@@ -33,19 +32,19 @@ async def search_accounts(
     return await service.search_accounts(query, limit)
 
 
-@router.get("/accounts/{username}/posts", response_model=PostsWithRepliesResponse)
+@router.get("/accounts/{username}/posts", response_model=PostsResponse)
 async def get_account_posts(
     username: str,
     service: Annotated[CollectionService, Depends(get_collection_service)],
-    posts_limit: Annotated[int, Query(ge=1)] = settings.x.posts_limit,
-    replies_limit: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1)] = settings.collector.posts_limit,
+    include_replies: bool = False,
     since: Annotated[str | None, Query()] = None,
     until_date: Annotated[str | None, Query()] = None,
-) -> PostsWithRepliesResponse:
+) -> PostsResponse:
     return await service.get_account_posts(
         username,
-        posts_limit,
-        replies_limit,
+        limit,
+        include_replies,
         since,
         until_date,
     )

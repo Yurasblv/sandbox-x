@@ -1,12 +1,12 @@
-from collector.api.schemas import AccountsResponse, PostsResponse, PostsWithRepliesResponse, RepliesResponse
+from collector.api.schemas import AccountsResponse, PostsResponse, RepliesResponse
+from collector.core.config import CollectorSettings
 from collector.providers.base import QueryType, XProvider
-from collector.services.utils import get_provider_settings
 
 
 class CollectionService:
-    def __init__(self, provider: XProvider) -> None:
+    def __init__(self, provider: XProvider, settings: CollectorSettings) -> None:
         self.provider = provider
-        self.settings = get_provider_settings(provider.provider_key)
+        self.settings = settings
 
     async def get_account(self, usernames: list[str]):
         result = await self.provider.get_accounts(usernames)
@@ -19,37 +19,20 @@ class CollectionService:
     async def get_account_posts(
         self,
         username: str,
-        posts_limit: int,
-        replies_limit: int,
+        limit: int,
+        include_replies: bool,
         since: str | None = None,
         until_date: str | None = None,
-    ):
+    ) -> PostsResponse:
         posts_result = await self.provider.get_account_posts(
             username,
-            limit=self._limit(posts_limit),
-            include_replies=True,
+            limit=self._limit(limit),
+            include_replies=include_replies,
             since=since,
             until_date=until_date,
         )
-        replies_by_post: dict[str, object] = {}
 
-        if replies_limit > 0:
-            for post in posts_result.posts:
-                replies_by_post[post.id] = await self.provider.get_replies(
-                    post.id,
-                    limit=self._limit(replies_limit),
-                )
-
-        return PostsWithRepliesResponse(
-            posts=posts_result.posts,
-            replies_by_post={
-                post_id: reply_result.replies for post_id, reply_result in replies_by_post.items()
-            },
-            meta=posts_result.metadata,
-            replies_meta={
-                post_id: reply_result.metadata for post_id, reply_result in replies_by_post.items()
-            },
-        )
+        return PostsResponse(posts=posts_result.posts, meta=posts_result.metadata)
     
     async def posts_by_ids(self, ids: list[str]) -> PostsResponse:
         result = await self.provider.get_posts_by_ids(ids)

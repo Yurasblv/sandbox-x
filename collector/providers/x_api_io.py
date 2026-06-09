@@ -5,10 +5,8 @@ import httpx
 from aiolimiter import AsyncLimiter
 from httpx_retries import Retry, RetryTransport
 from loguru import logger
-from pydantic import ValidationError
 
 from collector.core.config import XSettings
-from collector.core.config import settings as app_settings
 from collector.core.errors import (
     ProviderConfigurationError,
     ProviderRateLimitError,
@@ -32,13 +30,14 @@ from collector.providers.x_api_io_utils import (
 
 
 class XAPIIOProvider(XProvider):
-    settings: XSettings = app_settings.x
-
     @property
     def provider_key(self) -> str:
         return self.settings.provider.value
 
-    def __init__(self) -> None:
+    def __init__(self, settings: XSettings, request_batch_size: int, rate_limiter: AsyncLimiter) -> None:
+        self.settings = settings
+        self.request_batch_size = request_batch_size
+        self.rate_limiter = rate_limiter
         if not self.settings.api_key:
             raise ProviderConfigurationError("X__API_KEY is required")
 
@@ -63,18 +62,19 @@ class XAPIIOProvider(XProvider):
         errors: list[ErrorDTO] = []
         raw: dict[str, Any] = {}
 
-        limiter = AsyncLimiter(self.settings.request_batch_size, time_period=1)
-        for i in range(0, len(usernames), self.settings.request_batch_size):
-            batch = usernames[i : i + self.settings.request_batch_size]
+        for i in range(0, len(usernames), self.request_batch_size):
+            batch = usernames[i : i + self.request_batch_size]
             batch_payloads = await asyncio.gather(
-                *(self._get_account_payload(username, limiter) for username in batch),
+                *(self._get_account_payload(username) for username in batch),
                 return_exceptions=True,
             )
 
             for username, payload in zip(batch, batch_payloads, strict=True):
+
                 if isinstance(payload, Exception):
                     errors.append(_account_error(username, payload))
                     continue
+
                 raw[username] = payload
                 user = payload.get("data") or payload.get("user") or payload
                 accounts.append(map_account(user))
@@ -93,13 +93,11 @@ class XAPIIOProvider(XProvider):
     async def _get_account_payload(
         self,
         username: str,
-        limiter: AsyncLimiter,
     ) -> dict[str, Any]:
-        async with limiter:
-            return await self._get(
-                "/twitter/user/info",
-                params=build_params(userName=username),
-            )
+        return await self._get(
+            "/twitter/user/info",
+            params=build_params(userName=username),
+        )
 
     async def search_accounts(self, query: str, *, limit: int) -> AccountCollectionResult:
         payload = await self._collect_pages(
@@ -111,9 +109,11 @@ class XAPIIOProvider(XProvider):
         accounts: list[XAccount] = []
         errors: list[ErrorDTO] = []
         for index, item in enumerate(payload["items"]):
+
             try:
                 accounts.append(map_account(item))
-            except (TypeError, ValueError, ValidationError) as exc:
+
+            except Exception as exc:
                 source = _account_error_source(item, index)
                 logger.warning(
                     "provider_account_mapping_error provider={} path={} source={} error={}",
@@ -268,7 +268,8 @@ class XAPIIOProvider(XProvider):
 
             page = await self._get(path, params=page_params)
             pages.append(page)
-            items.extend(page.get(item_key) or [])
+            page_items = _page_items(page, item_key)
+            items.extend(page_items)
             has_next_page = bool(page.get("has_next_page"))
             cursor = page.get("next_cursor") or ""
 
@@ -281,6 +282,16 @@ class XAPIIOProvider(XProvider):
                 cursor or None,
             )
 
+            if not page_items:
+                logger.info(
+                    "provider_pagination_stopped provider={} path={} reason=empty_page collected={} next_cursor={}",
+                    self.provider_key,
+                    path,
+                    len(items),
+                    cursor or None,
+                )
+                break
+
             if not cursor:
                 break
 
@@ -292,7 +303,8 @@ class XAPIIOProvider(XProvider):
         }
 
     async def _get(self, path: str, *, params: dict[str, Any]) -> dict[str, Any]:
-        response = await self.send_request("GET", path, params=params)
+        async with self.rate_limiter:
+            response = await self.send_request("GET", path, params=params)
 
         if response.status_code == 429:
             logger.warning(
@@ -356,6 +368,13 @@ def _account_error(username: str, exc: Exception) -> ErrorDTO:
         status_code = int((exc.details or {}).get("status_code") or 500)
 
     return ErrorDTO(source=username, error=str(exc), status_code=status_code)
+
+
+def _page_items(page: dict[str, Any], item_key: str) -> list[dict[str, Any]]:
+    raw_items = page.get(item_key)
+    if raw_items is None and isinstance(page.get("data"), dict):
+        raw_items = page["data"].get(item_key)
+    return raw_items or []
 
 
 def _account_error_source(item: Any, index: int) -> str:

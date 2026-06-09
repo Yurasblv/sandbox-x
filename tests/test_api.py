@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from collector.api.dependencies import get_collection_service
-from collector.api.schemas import AccountsResponse, PostsResponse, PostsWithRepliesResponse, RepliesResponse
+from collector.api.schemas import AccountsResponse, PostsResponse, RepliesResponse
 from collector.main import app
 from collector.models import ErrorDTO, ProviderMetadata, XAccount, XPost, XReply
 
@@ -23,23 +23,15 @@ class FakeCollectionService:
     async def get_account_posts(
         self,
         username: str,
-        posts_limit: int,
-        replies_limit: int,
+        limit: int,
+        include_replies: bool,
         since: str | None = None,
         until_date: str | None = None,
-    ) -> PostsWithRepliesResponse:
-        posts = [_post(f"{username}-{index}", username) for index in range(posts_limit)]
-        return PostsWithRepliesResponse(
-            posts=posts,
-            replies_by_post={
-                post.id: [_reply(f"{post.id}-reply-{index}") for index in range(replies_limit)]
-                for post in posts
-            },
-            meta=_meta("/twitter/user/last_tweets", input_ids=[username]),
-            replies_meta={
-                post.id: _meta("/twitter/tweet/replies", input_ids=[post.id]) for post in posts
-            },
-        )
+    ) -> PostsResponse:
+        posts = [_post(f"{username}-{index}", username) for index in range(limit)]
+        for post in posts:
+            post.is_reply = include_replies
+        return PostsResponse(posts=posts, meta=_meta("/twitter/user/last_tweets", input_ids=[username]))
 
     async def posts_by_ids(self, ids: list[str]) -> PostsResponse:
         return PostsResponse(
@@ -130,14 +122,14 @@ def test_get_account_posts_with_replies() -> None:
 
     response = client.get(
         "/api/v1/accounts/elonmusk/posts",
-        params={"posts_limit": 2, "replies_limit": 1},
+        params={"limit": 2, "include_replies": True},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert len(body["posts"]) == 2
-    assert sorted(body["replies_by_post"]) == ["elonmusk-0", "elonmusk-1"]
-    assert len(body["replies_by_post"]["elonmusk-0"]) == 1
+    assert [post["isReply"] for post in body["posts"]] == [True, True]
+    assert "replies_by_post" not in body
 
 
 def test_get_posts_by_ids() -> None:
