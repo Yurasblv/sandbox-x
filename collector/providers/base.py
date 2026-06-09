@@ -1,36 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Literal
 
-from collector.models import ErrorDTO, ProviderMetadata, XAccount, XPost, XReply
-
-QueryType = Literal["Latest", "Top"]
-
-
-class AccountCollectionResult:
-    def __init__(
-        self,
-        accounts: list[XAccount],
-        metadata: ProviderMetadata,
-        errors: list[ErrorDTO] | None = None,
-    ) -> None:
-        self.accounts = accounts
-        self.metadata = metadata
-        self.errors = errors or []
+from collector.services.ports import (
+    AccountCollectionResult,
+    CollectionSource,
+    PostCollectionResult,
+    QueryType,
+    ReplyCollectionResult,
+)
 
 
-class PostCollectionResult:
-    def __init__(self, posts: list[XPost], metadata: ProviderMetadata) -> None:
-        self.posts = posts
-        self.metadata = metadata
-
-
-class ReplyCollectionResult:
-    def __init__(self, replies: list[XReply], metadata: ProviderMetadata) -> None:
-        self.replies = replies
-        self.metadata = metadata
-
-
-class XProvider(ABC):
+class XProvider(CollectionSource, ABC):
     @abstractmethod
     async def get_accounts(self, usernames: list[str]) -> AccountCollectionResult:
         raise NotImplementedError

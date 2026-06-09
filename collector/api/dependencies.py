@@ -1,15 +1,19 @@
 from collections.abc import AsyncIterator
-from functools import lru_cache
 from typing import Annotated
 
 from aiolimiter import AsyncLimiter
 from fastapi import Depends, Query
 
-from collector.core.config import BaseProviderSettings, CollectorSettings, Settings, settings
+from collector.core.config import BaseProviderSettings, Settings, settings
 from collector.core.enums import ProviderKey
 from collector.core.errors import ProviderNotFoundError
 from collector.providers.factory import build_provider
 from collector.services.collection import CollectionService
+
+PROVIDER_RATE_LIMITER = AsyncLimiter(
+    max(1, settings.collector.rate_limit_requests),
+    time_period=max(settings.collector.rate_limit_period_seconds, 1.0),
+)
 
 
 def get_settings() -> Settings:
@@ -42,36 +46,32 @@ def get_provider_settings(
     )
 
 
-def get_collector_settings(
+def get_max_posts_limit(
     app_settings: Annotated[Settings, Depends(get_settings)],
-) -> CollectorSettings:
-    return app_settings.collector
+) -> int:
+    return app_settings.collector.max_posts_limit
 
 
-@lru_cache
-def build_provider_rate_limiter(requests: int, period_seconds: float) -> AsyncLimiter:
-    return AsyncLimiter(max(1, requests), time_period=max(period_seconds, 1.0))
+def get_request_batch_size(
+    app_settings: Annotated[Settings, Depends(get_settings)],
+) -> int:
+    return app_settings.collector.request_batch_size
 
 
-def get_provider_rate_limiter(
-    collector_settings: Annotated[CollectorSettings, Depends(get_collector_settings)],
-) -> AsyncLimiter:
-    return build_provider_rate_limiter(
-        collector_settings.rate_limit_requests,
-        collector_settings.rate_limit_period_seconds,
-    )
+def get_provider_rate_limiter() -> AsyncLimiter:
+    return PROVIDER_RATE_LIMITER
 
 
 async def get_collection_service(
     provider_settings: Annotated[BaseProviderSettings, Depends(get_provider_settings)],
-    collector_settings: Annotated[CollectorSettings, Depends(get_collector_settings)],
+    max_posts_limit: Annotated[int, Depends(get_max_posts_limit)],
+    request_batch_size: Annotated[int, Depends(get_request_batch_size)],
     rate_limiter: Annotated[AsyncLimiter, Depends(get_provider_rate_limiter)],
 ) -> AsyncIterator[CollectionService]:
-    provider = build_provider(provider_settings, collector_settings, rate_limiter)
+    provider = build_provider(provider_settings, request_batch_size, rate_limiter)
 
     try:
-        yield CollectionService(provider, collector_settings)
-
+        yield CollectionService(provider, max_posts_limit)
     finally:
         if close := getattr(provider, "close", None):
             await close()
